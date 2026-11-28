@@ -1,0 +1,144 @@
+import { Router } from 'express';
+import { body } from 'express-validator';
+import { validate } from '../middlewares/validate.middleware.js';
+import { checkAuth, verifyStudent, verifyTeacher, requireVerifiedEmail } from '../middlewares/auth.middleware.js';
+import { sensitiveWriteLimiter } from '../middlewares/rateLimit.middleware.js';
+import {
+	createExam,
+	addQuestionsToExam,
+	removeQuestionsFromExam,
+	getAllExams,
+	getExamById,
+	updateExam,
+	deleteExam,
+	searchExamByCode,
+	publishExam,
+	reorderExamQuestions,
+	setExamQuestions,
+	createAndAttachQuestion,
+	duplicateExam,
+	getMyExams,
+	syncStatusesNow,
+	endExamNow,
+	cancelExam,
+	extendExam,
+	regenerateExamCode,
+	getExamStats,
+} from '../controllers/exam.controller.js';
+
+const router = Router();
+
+// Create exam
+router.post(
+	'/create',
+	checkAuth,
+	verifyTeacher,
+	requireVerifiedEmail,
+	sensitiveWriteLimiter,
+	body('title').notEmpty().withMessage('Title is required'),
+	body('description').notEmpty().withMessage('Description is required'),
+	validate,
+	createExam,
+);
+
+// Add questions to exam (PATCH)
+router.patch(
+	'/:id/questions',
+	checkAuth,
+	verifyTeacher,
+	sensitiveWriteLimiter,
+	body('questionIds').isArray().withMessage('questionIds must be an array'),
+	validate,
+	addQuestionsToExam,
+);
+
+// Remove questions from exam (PATCH)
+router.patch(
+	'/:id/questions/remove',
+	checkAuth,
+	verifyTeacher,
+	sensitiveWriteLimiter,
+	body('questionIds').isArray().withMessage('questionIds must be an array'),
+	validate,
+	removeQuestionsFromExam,
+);
+
+// Get all exams (optionally filter by teacher)
+router.get('/all', checkAuth, getAllExams);
+
+// --- IMPORTANT: Place specific string routes BEFORE dynamic /:id routes ---
+// Student: search exam by search ID
+router.get('/search/:code', checkAuth, verifyStudent, searchExamByCode);
+
+// Fast list for the logged-in teacher
+router.get('/my', checkAuth, verifyTeacher, getMyExams);
+
+// Optional: ops/testing — trigger a sync now
+router.post('/sync-status', checkAuth, verifyTeacher, sensitiveWriteLimiter, syncStatusesNow);
+
+// Get exam stats
+router.get('/stats', checkAuth, verifyTeacher, getExamStats);
+
+// Get single exam by ID
+router.get('/:id', checkAuth, getExamById);
+
+// Update exam
+router.put('/:id/update', checkAuth, verifyTeacher, sensitiveWriteLimiter, updateExam);
+
+// Delete exam
+router.delete('/:id', checkAuth, verifyTeacher, sensitiveWriteLimiter, deleteExam);
+
+// Publish (draft -> active)
+router.post('/:id/publish', checkAuth, verifyTeacher, requireVerifiedEmail, sensitiveWriteLimiter, publishExam);
+
+// End live exam immediately
+router.post('/:id/end-now', checkAuth, verifyTeacher, sensitiveWriteLimiter, endExamNow);
+
+// Cancel a scheduled (not started) exam
+router.post('/:id/cancel', checkAuth, verifyTeacher, sensitiveWriteLimiter, cancelExam);
+
+// Extend end time (body: { minutes?: number, endTime?: ISOString })
+router.patch('/:id/extend', checkAuth, verifyTeacher, sensitiveWriteLimiter, extendExam);
+
+// Regenerate share/search code
+router.post('/:id/regenerate-code', checkAuth, verifyTeacher, sensitiveWriteLimiter, regenerateExamCode);
+
+// Reorder questions (order only)
+router.patch(
+	'/:id/reorder',
+	checkAuth,
+	verifyTeacher,
+	sensitiveWriteLimiter,
+	body('order').isArray({ min: 1 }).withMessage('order array required'),
+	validate,
+	reorderExamQuestions,
+);
+
+// Replace full question set
+router.patch(
+	'/:id/questions/set',
+	checkAuth,
+	verifyTeacher,
+	sensitiveWriteLimiter,
+	body('questionIds').isArray().withMessage('questionIds array required'),
+	validate,
+	setExamQuestions,
+);
+
+// Quick create-and-attach a question
+router.post(
+	'/:id/questions/create',
+	checkAuth,
+	verifyTeacher,
+	sensitiveWriteLimiter,
+	body('type').notEmpty().withMessage('Type is required'),
+	body('text').notEmpty().withMessage('Text is required'),
+	body('max_marks').notEmpty().withMessage('Max marks is required'),
+	validate,
+	createAndAttachQuestion,
+);
+
+// Duplicate exam
+router.post('/:id/duplicate', checkAuth, verifyTeacher, sensitiveWriteLimiter, duplicateExam);
+
+export default router;
